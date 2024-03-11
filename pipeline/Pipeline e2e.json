@@ -1,0 +1,107 @@
+{
+	"name": "Pipeline e2e",
+	"properties": {
+		"activities": [
+			{
+				"name": "Notebook decryption",
+				"type": "SynapseNotebook",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"notebook": {
+						"referenceName": "Notebook_decryption_check",
+						"type": "NotebookReference"
+					},
+					"parameters": {
+						"adls_enc_file_path": {
+							"value": "abfss://visaelavonadls2fs@visaelavonadls2.dfs.core.windows.net/20240303_16_18_24_enc.enc",
+							"type": "string"
+						},
+						"decryption_key_value": {
+							"value": "b'ZhxSRQnX_Boi0LpkIQM9Mzu8c6IeS_bt0O3S_sgzd0I='",
+							"type": "string"
+						},
+						"adls_json_path": {
+							"value": "abfss://visaelavonadls2fs@visaelavonadls2.dfs.core.windows.net/functionality_check/json_output/",
+							"type": "string"
+						},
+						"hash_id_column": {
+							"value": "age",
+							"type": "string"
+						},
+						"uuid_column": {
+							"value": "id",
+							"type": "string"
+						}
+					},
+					"snapshot": true,
+					"sparkPool": {
+						"referenceName": "devv2",
+						"type": "BigDataPoolReference"
+					},
+					"executorSize": "Small",
+					"conf": {
+						"spark.dynamicAllocation.enabled": false
+					},
+					"driverSize": "Small"
+				}
+			},
+			{
+				"name": "Notebook QC",
+				"type": "SynapseNotebook",
+				"dependsOn": [
+					{
+						"activity": "Notebook decryption",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"notebook": {
+						"referenceName": "Notebook_qcCheck",
+						"type": "NotebookReference"
+					},
+					"parameters": {
+						"json_file_path": {
+							"value": "abfss://visaelavonadls2fs@visaelavonadls2.dfs.core.windows.net/functionality_check/json_output/part-*",
+							"type": "string"
+						},
+						"qc_file_path": {
+							"value": "abfss://visaelavonadls2fs@visaelavonadls2.dfs.core.windows.net/functionality_check/Quality_check/",
+							"type": "string"
+						}
+					},
+					"snapshot": true,
+					"sparkPool": {
+						"referenceName": "devv2",
+						"type": "BigDataPoolReference"
+					},
+					"executorSize": "Small",
+					"conf": {
+						"spark.dynamicAllocation.enabled": false
+					},
+					"driverSize": "Small"
+				}
+			}
+		],
+		"annotations": [],
+		"lastPublishTime": "2024-03-04T17:45:37Z"
+	},
+	"type": "Microsoft.Synapse/workspaces/pipelines"
+}

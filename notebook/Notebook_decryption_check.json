@@ -1,0 +1,205 @@
+{
+	"name": "Notebook_decryption_check",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "devv2",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"runAsWorkspaceSystemIdentity": false,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "604550ae-7aa7-424d-a50c-9c81de7da6f3"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"enableDebugMode": false,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "Synapse PySpark"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/b12a4e9b-5d94-4224-b438-574344ea45d4/resourceGroups/visa-elavon-assessment/providers/Microsoft.Synapse/workspaces/visa-el-wks/bigDataPools/devv2",
+				"name": "devv2",
+				"type": "Spark",
+				"endpoint": "https://visa-el-wks.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/devv2",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net",
+					"authHeader": null
+				},
+				"sparkVersion": "3.3",
+				"nodeCount": 10,
+				"cores": 4,
+				"memory": 28,
+				"extraHeader": null
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"tags": [
+						"parameters"
+					]
+				},
+				"source": [
+					"adls_enc_file_path=\"\"\r\n",
+					"decryption_key_value=\"\"\r\n",
+					"adls_json_path=\"\"\r\n",
+					"hash_id_column=''\r\n",
+					"uuid_column=''"
+				],
+				"execution_count": 24
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"from pyspark.sql import SparkSession\r\n",
+					"from pyspark.sql.functions import udf\r\n",
+					"from pyspark.sql.functions import col, concat_ws, lit, sha2,concat\r\n",
+					"from pyspark.sql.types import StringType\r\n",
+					"from cryptography.fernet import Fernet\r\n",
+					"import json\r\n",
+					"import csv\r\n",
+					"import uuid\r\n",
+					"from io import StringIO\r\n",
+					"from io import BytesIO\r\n",
+					"import pyarrow.parquet as pq\r\n",
+					"\r\n",
+					"class FileDecryptor:\r\n",
+					"    \"\"\"\r\n",
+					"    A class to decrypt files and determine their types.\r\n",
+					"\r\n",
+					"    Attributes:\r\n",
+					"    - key (bytes): The decryption key.\r\n",
+					"    - fernet (Fernet): Fernet object for encryption and decryption.\r\n",
+					"    \"\"\"\r\n",
+					"\r\n",
+					"    def __init__(self, key):\r\n",
+					"        \"\"\"\r\n",
+					"        Initialize the FileDecryptor with the given key.\r\n",
+					"\r\n",
+					"        Args:\r\n",
+					"        - key (bytes): The decryption key.\r\n",
+					"        \"\"\"\r\n",
+					"        self.key = key\r\n",
+					"        self.fernet = Fernet(self.key)\r\n",
+					"\r\n",
+					"    def decrypt_file(self, encrypted_data):\r\n",
+					"        \"\"\"\r\n",
+					"        Decrypt the encrypted data.\r\n",
+					"\r\n",
+					"        Args:\r\n",
+					"        - encrypted_data (str): The encrypted data to be decrypted.\r\n",
+					"\r\n",
+					"        Returns:\r\n",
+					"        - str: The decrypted data.\r\n",
+					"        \"\"\"\r\n",
+					"        decrypted_data = self.fernet.decrypt(encrypted_data.encode()).decode('utf-8')\r\n",
+					"        return decrypted_data\r\n",
+					"\r\n",
+					"    def create_dataframe(self, decrypted_content):\r\n",
+					"        \"\"\"\r\n",
+					"        Create a DataFrame from the decrypted content.\r\n",
+					"\r\n",
+					"        Args:\r\n",
+					"        - decrypted_content (str): The decrypted content to create the DataFrame from.\r\n",
+					"\r\n",
+					"        Returns:\r\n",
+					"        - DataFrame: The DataFrame created from the decrypted content.\r\n",
+					"        \"\"\"\r\n",
+					"        data = [line.split(',') for line in decrypted_content.strip().split('\\n')[1:]]\r\n",
+					"        columns = decrypted_content.strip().split('\\n')[0].split(',')\r\n",
+					"        spark = SparkSession.builder.getOrCreate()\r\n",
+					"        df = spark.createDataFrame(data, columns)\r\n",
+					"        return df\r\n",
+					"\r\n",
+					"\r\n",
+					"if __name__ == \"__main__\":\r\n",
+					"    # Create a SparkSession\r\n",
+					"    spark = SparkSession.builder \\\r\n",
+					"        .appName(\"DecryptFilesWithFernet\") \\\r\n",
+					"        .getOrCreate()\r\n",
+					"\r\n",
+					"    # Define the decryption key\r\n",
+					"    decryption_key = b'ZhxSRQnX_Boi0LpkIQM9Mzu8c6IeS_bt0O3S_sgzd0I='  # Replace with your decryption key\r\n",
+					"\r\n",
+					"    # List of encrypted file paths\r\n",
+					"    encrypted_files = [adls_enc_file_path]\r\n",
+					"\r\n",
+					"    # Initialize FileDecryptor instance\r\n",
+					"    decryptor = FileDecryptor(decryption_key)\r\n",
+					"\r\n",
+					"    # Define UDF for decryption\r\n",
+					"    decrypt_udf = udf(decryptor.decrypt_file, StringType())\r\n",
+					"\r\n",
+					"    for file_path in encrypted_files:\r\n",
+					"        # Read the encrypted file as DataFrame\r\n",
+					"        encrypted_df = spark.read.text(file_path)\r\n",
+					"\r\n",
+					"        # Apply decryption UDF\r\n",
+					"        decrypted_df = encrypted_df.withColumn(\"decrypted_content\", decrypt_udf(encrypted_df[\"value\"]))\r\n",
+					"\r\n",
+					"        # Create DataFrame from decrypted content\r\n",
+					"        decrypted_content = decrypted_df.select(\"decrypted_content\").first()[0]\r\n",
+					"        df = decryptor.create_dataframe(decrypted_content)\r\n",
+					"\r\n",
+					"        # Show the decrypted content\r\n",
+					"        print(f\"File {file_path}:\")\r\n",
+					"        df.show()\r\n",
+					"\r\n",
+					"        hash_df = df.withColumn(hash_id_column, sha2(col(hash_id_column), 256))\r\n",
+					"        df_uuid = hash_df.withColumn(\"uuid_column\",sha2(concat(col(uuid_column),lit(str(uuid.uuid4()))), 256))\r\n",
+					"\r\n",
+					"        json_string = df_uuid.toJSON().collect()\r\n",
+					"\r\n",
+					"        json_objects = [json.loads(json_str) for json_str in json_string]\r\n",
+					"        print(json_objects)\r\n",
+					"        \r\n",
+					"        json_df = spark.createDataFrame(json_objects)\r\n",
+					"        \r\n",
+					"        json_df.write.mode(\"overwrite\").json(adls_json_path)\r\n",
+					"\r\n",
+					"    # Stop the SparkSession\r\n",
+					"    spark.stop()"
+				],
+				"execution_count": 23
+			}
+		]
+	}
+}

@@ -1,0 +1,106 @@
+{
+	"name": "Hashing",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "devv2",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"runAsWorkspaceSystemIdentity": false,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "16bf4e06-f781-4765-90d7-3bc86d8c3aa5"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"synapse_widget": {
+				"version": "0.1"
+			},
+			"enableDebugMode": true,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "Synapse PySpark"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/b12a4e9b-5d94-4224-b438-574344ea45d4/resourceGroups/visa-elavon-assessment/providers/Microsoft.Synapse/workspaces/visa-el-wks/bigDataPools/devv2",
+				"name": "devv2",
+				"type": "Spark",
+				"endpoint": "https://visa-el-wks.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/devv2",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net",
+					"authHeader": null
+				},
+				"sparkVersion": "3.3",
+				"nodeCount": 10,
+				"cores": 4,
+				"memory": 28,
+				"extraHeader": null
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "code",
+				"source": [
+					"%run /Decryptioncsv"
+				],
+				"execution_count": 6
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"hash_df = df.withColumn('id', sha2(col('id'), 256))\r\n",
+					"df_uuid = hash_df.withColumn(\"uuid_column\",sha2(concat(col('id'),lit(str(uuid.uuid4()))), 256))\r\n",
+					"\r\n",
+					"json_string = df_uuid.toJSON().collect()\r\n",
+					"\r\n",
+					"json_objects = [json.loads(json_str) for json_str in json_string]\r\n",
+					"print(json_objects)\r\n",
+					"\r\n",
+					"json_df = spark.createDataFrame(json_objects)\r\n",
+					"\r\n",
+					"json_df.write.mode(\"overwrite\").json(\"abfss://visaelavonadls2fs@visaelavonadls2.dfs.core.windows.net/functionality_check/json_output/\")\r\n",
+					"\r\n",
+					"json_file_path = \"abfss://visaelavonadls2fs@visaelavonadls2.dfs.core.windows.net/functionality_check/json_output/part-*\"\r\n",
+					"df = spark.read.json(json_file_path)\r\n",
+					"\r\n",
+					"# Perform quality checks\r\n",
+					"# Example: Check for null values in each column\r\n",
+					"quality_checks = {col_name: df.where(col(col_name).isNull()).count() for col_name in df.columns}\r\n",
+					"\r\n",
+					"# Calculate total record count\r\n",
+					"total_records = df.count()\r\n",
+					"print(f\"Total Record Count: {total_records}\")\r\n",
+					"for col_name, null_count in quality_checks.items():\r\n",
+					"    print(f\"Column '{col_name}': Null Count - {null_count}\")"
+				],
+				"execution_count": 7
+			}
+		]
+	}
+}
